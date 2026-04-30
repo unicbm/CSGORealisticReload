@@ -4,7 +4,7 @@
 #include <sourcemod>
 #include <sdktools>
 
-#define PLUGIN_VERSION "1.0.1-debug1"
+#define PLUGIN_VERSION "1.0.1-debug2"
 
 ConVar g_cvEnable;
 ConVar g_cvHumans;
@@ -90,7 +90,7 @@ void TryApplyRealisticReload(int client, int buttons, int cmdnum, int tickcount)
 
 	bool inReload = !!GetEntProp(weapon, Prop_Data, "m_bInReload");
 	int weaponRef = EntIndexToEntRef(weapon);
-	DebugMaybePrintState(client, weapon, "cmd", buttons, cmdnum, tickcount, -1, -1, -1, -1, false, false);
+	DebugMaybePrintState(client, weapon, weaponRef != g_iDebugWeaponRef[client] ? "weapon_change" : "cmd", buttons, cmdnum, tickcount, -1, -1, -1, -1, false, weaponRef != g_iDebugWeaponRef[client]);
 	if (!inReload)
 	{
 		g_iAppliedReloadWeaponRef[client] = INVALID_ENT_REFERENCE;

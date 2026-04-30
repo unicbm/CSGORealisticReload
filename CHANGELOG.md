@@ -1,5 +1,10 @@
 # Changelog / 更新日志
 
+## 1.0.1-debug2
+
+- Add one-shot `weapon_change` debug lines so buy/pickup/switch state can be diagnosed before reload logic runs.
+- 增加一次性的 `weapon_change` debug 行，用于在换弹逻辑执行前排查购买、拾取、切枪时的武器初始弹药状态。
+
 ## 1.0.1-debug1
 
 - Preserve each weapon's default reserve cadence when aligning reserve ammo, fixing FAMAS/Galil-style reserve sequences such as FAMAS `90 -> 65 -> 40 -> 15 -> 0`.
