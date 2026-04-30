@@ -31,11 +31,35 @@ sm_realistic_reload_humans "1"
 sm_realistic_reload_bots "1"
 sm_realistic_reload_align_reserve "1"
 sm_realistic_reload_exclude_shotguns "1"
+sm_realistic_reload_debug "1"
 ```
 
 **English:** A config file is generated at `cfg/sourcemod/realistic_reload.cfg` after the plugin first runs.
 
 **中文：** 插件首次运行后会生成配置文件：`cfg/sourcemod/realistic_reload.cfg`。
+
+## Debug Logging / 调试日志
+
+**English:** `1.0.0-debug1` keeps the `1.0.0` reload behavior and only adds console diagnostics. When `sm_realistic_reload_debug` is `1`, lines prefixed with `[RRDBG]` are printed to the player's console when reload-related state changes.
+
+**中文：** `1.0.0-debug1` 保持 `1.0.0` 的换弹行为，只增加控制台诊断信息。`sm_realistic_reload_debug` 为 `1` 时，玩家控制台会在换弹相关状态变化时打印 `[RRDBG]` 行。
+
+Key fields / 关键字段：
+
+```text
+reason          cmd / skip_* / apply_before / apply_after
+wantsR          current command is pressing reload / 当前命令是否按下 R
+attack          current command is pressing attack / 当前命令是否开火
+inReload        weapon m_bInReload
+clip            weapon m_iClip1
+maxClip         plugin's hardcoded max clip for this classname
+reserveUsed     reserve value used by current plugin logic
+targetReserve   reserve value the plugin writes before engine load
+sendReserve     weapon Prop_Send m_iPrimaryReserveAmmoCount
+dataReserve     weapon Prop_Data m_iPrimaryReserveAmmoCount
+playerReserve   player m_iAmmo[ammoType]
+ammoType        weapon m_iPrimaryAmmoType
+```
 
 ## Installation / 安装
 
