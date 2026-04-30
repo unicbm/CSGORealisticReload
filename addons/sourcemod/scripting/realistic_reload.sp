@@ -4,7 +4,7 @@
 #include <sourcemod>
 #include <sdktools>
 
-#define PLUGIN_VERSION "1.0.3"
+#define PLUGIN_VERSION "1.0.4"
 
 ConVar g_cvEnable;
 ConVar g_cvHumans;
@@ -14,7 +14,9 @@ ConVar g_cvExcludeShotguns;
 
 int g_iAppliedReloadWeaponRef[MAXPLAYERS + 1];
 int g_iPendingReloadWeaponRef[MAXPLAYERS + 1];
-int g_iPendingReloadClip[MAXPLAYERS + 1];
+int g_iPendingReloadStartClip[MAXPLAYERS + 1];
+int g_iPendingReloadFinalClip[MAXPLAYERS + 1];
+int g_iPendingReloadFinalReserve[MAXPLAYERS + 1];
 
 public Plugin myinfo =
 {
@@ -52,7 +54,13 @@ public void OnClientDisconnect(int client)
 public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon, int &subtype, int &cmdnum, int &tickcount, int &seed, int mouse[2])
 {
 	if (IsValidAliveClient(client))
+	{
 		TryApplyRealisticReload(client);
+	}
+	else if (client > 0 && client <= MaxClients)
+	{
+		ClearRealisticReloadState(client);
+	}
 
 	return Plugin_Continue;
 }
@@ -136,60 +144,10 @@ void TryApplyRealisticReload(int client)
 		return;
 	}
 
-	int missing = maxClip - clip;
-	int reserveBeforeEngineLoad;
-	int pendingFinalClip = 0;
-
-	if (reserve < maxClip)
-		pendingFinalClip = reserve;
-
-	if (g_cvAlignReserve.BoolValue)
-	{
-		int targetReserveAfterReload = reserve - maxClip;
-		if (targetReserveAfterReload < 0)
-			targetReserveAfterReload = 0;
-		targetReserveAfterReload = AlignRealisticReloadReserve(targetReserveAfterReload, maxClip, GetRealisticReloadMaxReserve(classname));
-
-		reserveBeforeEngineLoad = targetReserveAfterReload + missing;
-		if (reserveBeforeEngineLoad > reserve)
-			reserveBeforeEngineLoad = reserve;
-	}
-	else
-	{
-		int extraReserve = reserve - missing;
-		if (extraReserve <= 0)
-		{
-			reserveBeforeEngineLoad = reserve;
-		}
-		else
-		{
-			int penalty = clip;
-			if (penalty > extraReserve)
-				penalty = extraReserve;
-
-			reserveBeforeEngineLoad = reserve - penalty;
-		}
-	}
-
-	bool adjustFinalClip = pendingFinalClip > 0 && pendingFinalClip < maxClip;
-	if (reserveBeforeEngineLoad >= reserve && !adjustFinalClip)
-		return;
-
-	if (reserveBeforeEngineLoad < reserve)
-		SetRealisticReloadReserveAmmo(client, weapon, reserveBeforeEngineLoad);
-
 	g_iAppliedReloadWeaponRef[client] = weaponRef;
-
-	if (adjustFinalClip)
-	{
-		g_iPendingReloadWeaponRef[client] = weaponRef;
-		g_iPendingReloadClip[client] = pendingFinalClip;
-	}
-	else
-	{
-		g_iPendingReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
-		g_iPendingReloadClip[client] = 0;
-	}
+	g_iPendingReloadWeaponRef[client] = weaponRef;
+	g_iPendingReloadStartClip[client] = clip;
+	CalculateRealisticReloadFinalAmmo(classname, reserve, maxClip, g_iPendingReloadFinalClip[client], g_iPendingReloadFinalReserve[client]);
 }
 
 void FinishPendingRealisticReload(int client, int weaponRef, int weapon)
@@ -199,31 +157,48 @@ void FinishPendingRealisticReload(int client, int weaponRef, int weapon)
 
 	if (g_iPendingReloadWeaponRef[client] != weaponRef)
 	{
-		g_iPendingReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
-		g_iPendingReloadClip[client] = 0;
+		ClearRealisticReloadState(client);
 		return;
 	}
 
-	int pendingClip = g_iPendingReloadClip[client];
-	g_iPendingReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
-	g_iPendingReloadClip[client] = 0;
+	int startClip = g_iPendingReloadStartClip[client];
+	int finalClip = g_iPendingReloadFinalClip[client];
+	int finalReserve = g_iPendingReloadFinalReserve[client];
+	ClearRealisticReloadState(client);
 
-	if (pendingClip <= 0 || !HasEntProp(weapon, Prop_Data, "m_iClip1"))
+	if (finalClip <= 0 || !HasEntProp(weapon, Prop_Data, "m_iClip1"))
 		return;
 
 	int clip = GetEntProp(weapon, Prop_Data, "m_iClip1");
-	if (clip > pendingClip)
+	if (clip > startClip)
 	{
-		SetEntProp(weapon, Prop_Data, "m_iClip1", pendingClip);
-		SetRealisticReloadReserveAmmo(client, weapon, 0);
+		SetEntProp(weapon, Prop_Data, "m_iClip1", finalClip);
+		SetRealisticReloadReserveAmmo(client, weapon, finalReserve);
 	}
+}
+
+void CalculateRealisticReloadFinalAmmo(const char[] classname, int reserve, int maxClip, int &finalClip, int &finalReserve)
+{
+	if (reserve < maxClip)
+	{
+		finalClip = reserve;
+		finalReserve = 0;
+		return;
+	}
+
+	finalClip = maxClip;
+	finalReserve = reserve - maxClip;
+	if (g_cvAlignReserve.BoolValue)
+		finalReserve = AlignRealisticReloadReserve(finalReserve, maxClip, GetRealisticReloadMaxReserve(classname));
 }
 
 void ClearRealisticReloadState(int client)
 {
 	g_iAppliedReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
 	g_iPendingReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
-	g_iPendingReloadClip[client] = 0;
+	g_iPendingReloadStartClip[client] = 0;
+	g_iPendingReloadFinalClip[client] = 0;
+	g_iPendingReloadFinalReserve[client] = 0;
 }
 
 int AlignRealisticReloadReserve(int reserve, int maxClip, int maxReserve)

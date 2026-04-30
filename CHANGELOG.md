@@ -1,5 +1,12 @@
 # Changelog / 更新日志
 
+## 1.0.4
+
+- Replace reserve pre-deduction with a two-stage correction: record the expected final ammo when reload starts, then apply it only after CS:GO actually increases the clip.
+- 将“预先扣 reserve”改成两阶段校正：换弹开始时记录期望结果，只有 CS:GO 确实增加弹匣后才写入最终弹药。
+- Fix low-reserve detachable magazine cases such as FAMAS `19/15 -> 15/0`, FAMAS `9/15 -> 15/0`, and AWP `4/5 -> 5/0`.
+- 修复低后备弹场景，例如 FAMAS `19/15 -> 15/0`、FAMAS `9/15 -> 15/0`、AWP `4/5 -> 5/0`。
+
 ## 1.0.3
 
 - Restore reserve detection by considering both weapon reserve props and the player's ammo pool instead of trusting a single source.

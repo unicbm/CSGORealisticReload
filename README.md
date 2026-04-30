@@ -120,9 +120,9 @@ sm_realistic_reload_exclude_shotguns "1"
 
 ## Behavior Details / 行为细节
 
-The plugin waits until CS:GO reports that the active weapon is actually reloading. Then it deducts reserve ammo once for that reload. This avoids fighting the game's reload animation or prediction.
+The plugin waits until CS:GO reports that the active weapon is actually reloading, records the final ammo that a discarded-magazine reload should produce, and applies that final ammo only after the game really increases the clip. This avoids punishing canceled reloads while keeping the final HUD result deterministic.
 
-插件会等到 CS:GO 确认当前武器已经进入换弹状态，再对这一次换弹扣除一次后备弹。这样不会和游戏原本的换弹动画或预测逻辑冲突。
+插件会等到 CS:GO 确认当前武器已经进入换弹状态，先记录这次“丢弃弹匣式换弹”应该得到的最终弹药；只有当游戏确实增加了弹匣子弹后，才写入最终弹药。这样不会惩罚取消换弹，同时保证最终 HUD 结果稳定。
 
 With reserve alignment enabled, the final reserve ammo is rounded down to the weapon's default reserve cadence whenever possible. For weapons whose default reserve is not a clean multiple of clip size, that remainder is preserved.
 
@@ -135,6 +135,7 @@ AK-47: 15 / 45  -> 30 / 0
 FAMAS: 0 / 90   -> 25 / 65
 AWP:   4 / 5    -> 5 / 0
 FAMAS: 1 / 15   -> 15 / 0
+FAMAS: 19 / 15  -> 15 / 0
 ```
 
 Shotguns are excluded by default because weapons like Nova, MAG-7, Sawed-Off, and XM1014 do not behave like detachable-magazine weapons in gameplay.
