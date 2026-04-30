@@ -4,7 +4,7 @@
 #include <sourcemod>
 #include <sdktools>
 
-#define PLUGIN_VERSION "1.0.2"
+#define PLUGIN_VERSION "1.0.3"
 
 ConVar g_cvEnable;
 ConVar g_cvHumans;
@@ -36,25 +36,17 @@ public void OnPluginStart()
 	AutoExecConfig(true, "realistic_reload");
 
 	for (int client = 1; client <= MaxClients; client++)
-	{
-		g_iAppliedReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
-		g_iPendingReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
-		g_iPendingReloadClip[client] = 0;
-	}
+		ClearRealisticReloadState(client);
 }
 
 public void OnClientPutInServer(int client)
 {
-	g_iAppliedReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
-	g_iPendingReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
-	g_iPendingReloadClip[client] = 0;
+	ClearRealisticReloadState(client);
 }
 
 public void OnClientDisconnect(int client)
 {
-	g_iAppliedReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
-	g_iPendingReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
-	g_iPendingReloadClip[client] = 0;
+	ClearRealisticReloadState(client);
 }
 
 public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon, int &subtype, int &cmdnum, int &tickcount, int &seed, int mouse[2])
@@ -68,20 +60,35 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 void TryApplyRealisticReload(int client)
 {
 	if (!g_cvEnable.BoolValue)
+	{
+		ClearRealisticReloadState(client);
 		return;
+	}
 
 	bool isBot = IsFakeClient(client);
 	if (isBot && !g_cvBots.BoolValue)
+	{
+		ClearRealisticReloadState(client);
 		return;
+	}
 	if (!isBot && !g_cvHumans.BoolValue)
+	{
+		ClearRealisticReloadState(client);
 		return;
+	}
 
 	int weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
 	if (!IsValidEntity(weapon))
+	{
+		ClearRealisticReloadState(client);
 		return;
+	}
 
 	if (!HasEntProp(weapon, Prop_Data, "m_iClip1") || !HasEntProp(weapon, Prop_Data, "m_bInReload"))
+	{
+		ClearRealisticReloadState(client);
 		return;
+	}
 
 	bool inReload = !!GetEntProp(weapon, Prop_Data, "m_bInReload");
 	int weaponRef = EntIndexToEntRef(weapon);
@@ -97,22 +104,37 @@ void TryApplyRealisticReload(int client)
 
 	char classname[64];
 	if (!GetEntityClassname(weapon, classname, sizeof(classname)))
+	{
+		ClearRealisticReloadState(client);
 		return;
+	}
 
 	if (g_cvExcludeShotguns.BoolValue && IsRealisticReloadShotgun(classname))
+	{
+		ClearRealisticReloadState(client);
 		return;
+	}
 
 	int maxClip = GetRealisticReloadMaxClip(classname);
 	if (maxClip <= 0)
+	{
+		ClearRealisticReloadState(client);
 		return;
+	}
 
 	int clip = GetEntProp(weapon, Prop_Data, "m_iClip1");
 	if (clip <= 0 || clip >= maxClip)
+	{
+		ClearRealisticReloadState(client);
 		return;
+	}
 
 	int reserve = GetRealisticReloadReserveAmmo(client, weapon);
 	if (reserve <= 0)
+	{
+		ClearRealisticReloadState(client);
 		return;
+	}
 
 	int missing = maxClip - clip;
 	int reserveBeforeEngineLoad;
@@ -191,7 +213,17 @@ void FinishPendingRealisticReload(int client, int weaponRef, int weapon)
 
 	int clip = GetEntProp(weapon, Prop_Data, "m_iClip1");
 	if (clip > pendingClip)
+	{
 		SetEntProp(weapon, Prop_Data, "m_iClip1", pendingClip);
+		SetRealisticReloadReserveAmmo(client, weapon, 0);
+	}
+}
+
+void ClearRealisticReloadState(int client)
+{
+	g_iAppliedReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
+	g_iPendingReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
+	g_iPendingReloadClip[client] = 0;
 }
 
 int AlignRealisticReloadReserve(int reserve, int maxClip, int maxReserve)
@@ -215,14 +247,26 @@ int AlignRealisticReloadReserve(int reserve, int maxClip, int maxReserve)
 int GetRealisticReloadReserveAmmo(int client, int weapon)
 {
 	int reserve = 0;
-	if (GetWeaponPlayerAmmo(client, weapon, reserve))
-		return reserve;
+	int playerReserve = 0;
+	int sendReserve = -1;
+	int dataReserve = -1;
+
+	if (GetWeaponPlayerAmmo(client, weapon, playerReserve))
+		reserve = playerReserve;
 
 	if (HasEntProp(weapon, Prop_Send, "m_iPrimaryReserveAmmoCount"))
-		return GetEntProp(weapon, Prop_Send, "m_iPrimaryReserveAmmoCount");
+	{
+		sendReserve = GetEntProp(weapon, Prop_Send, "m_iPrimaryReserveAmmoCount");
+		if (sendReserve > reserve)
+			reserve = sendReserve;
+	}
 
 	if (HasEntProp(weapon, Prop_Data, "m_iPrimaryReserveAmmoCount"))
-		return GetEntProp(weapon, Prop_Data, "m_iPrimaryReserveAmmoCount");
+	{
+		dataReserve = GetEntProp(weapon, Prop_Data, "m_iPrimaryReserveAmmoCount");
+		if (dataReserve > reserve)
+			reserve = dataReserve;
+	}
 
 	return reserve;
 }

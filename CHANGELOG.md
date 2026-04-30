@@ -1,5 +1,12 @@
 # Changelog / 更新日志
 
+## 1.0.3
+
+- Restore reserve detection by considering both weapon reserve props and the player's ammo pool instead of trusting a single source.
+- 同时读取武器 reserve prop 和玩家 ammo pool，避免单一来源为 0 时导致功能整体跳过。
+- Harden partial-final-magazine correction so the reserve is forced to zero only after the game actually completes the reload.
+- 加固最后一个不完整弹匣的修正逻辑，只在游戏确实完成换弹后才把后备弹压到 0。
+
 ## 1.0.2
 
 - Use the player's authoritative ammo pool before weapon reserve props, fixing cases where CS:GO ignored the reserve deduction.
