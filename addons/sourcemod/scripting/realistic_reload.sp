@@ -4,7 +4,7 @@
 #include <sourcemod>
 #include <sdktools>
 
-#define PLUGIN_VERSION "1.0.4"
+#define PLUGIN_VERSION "1.0.5"
 
 ConVar g_cvEnable;
 ConVar g_cvHumans;
@@ -36,6 +36,8 @@ public void OnPluginStart()
 	g_cvExcludeShotguns = CreateConVar("sm_realistic_reload_exclude_shotguns", "1", "Keep shell-by-shell shotgun reload behavior unchanged.", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 
 	AutoExecConfig(true, "realistic_reload");
+	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
+	HookEvent("player_spawn", Event_PlayerSpawn, EventHookMode_Post);
 
 	for (int client = 1; client <= MaxClients; client++)
 		ClearRealisticReloadState(client);
@@ -49,6 +51,56 @@ public void OnClientPutInServer(int client)
 public void OnClientDisconnect(int client)
 {
 	ClearRealisticReloadState(client);
+}
+
+public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+{
+	for (int client = 1; client <= MaxClients; client++)
+		ClearRealisticReloadState(client);
+
+	RequestFrame(Frame_RefillAllPlayers);
+	CreateTimer(0.2, Timer_RefillAllPlayers, _, TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
+{
+	int client = GetClientOfUserId(event.GetInt("userid"));
+	if (client <= 0 || client > MaxClients)
+		return;
+
+	ClearRealisticReloadState(client);
+	RequestFrame(Frame_RefillSpawnedPlayer, GetClientUserId(client));
+	CreateTimer(0.1, Timer_RefillSpawnedPlayer, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public void Frame_RefillAllPlayers(any data)
+{
+	for (int client = 1; client <= MaxClients; client++)
+		RefillClientWeaponsForNewRound(client);
+}
+
+public void Frame_RefillSpawnedPlayer(any userid)
+{
+	int client = GetClientOfUserId(userid);
+	if (client > 0 && client <= MaxClients)
+		RefillClientWeaponsForNewRound(client);
+}
+
+public Action Timer_RefillAllPlayers(Handle timer)
+{
+	for (int client = 1; client <= MaxClients; client++)
+		RefillClientWeaponsForNewRound(client);
+
+	return Plugin_Stop;
+}
+
+public Action Timer_RefillSpawnedPlayer(Handle timer, any userid)
+{
+	int client = GetClientOfUserId(userid);
+	if (client > 0 && client <= MaxClients)
+		RefillClientWeaponsForNewRound(client);
+
+	return Plugin_Stop;
 }
 
 public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon, int &subtype, int &cmdnum, int &tickcount, int &seed, int mouse[2])
@@ -144,10 +196,25 @@ void TryApplyRealisticReload(int client)
 		return;
 	}
 
+	int finalClip;
+	int finalReserve;
+	int reserveBeforeEngineLoad;
+	CalculateRealisticReloadAmmo(classname, reserve, maxClip, finalClip, finalReserve, reserveBeforeEngineLoad);
+
+	if (reserveBeforeEngineLoad <= 0 || finalClip <= 0)
+	{
+		ClearRealisticReloadState(client);
+		return;
+	}
+
+	SetRealisticReloadReserveAmmo(client, weapon, reserveBeforeEngineLoad);
+	SetEntProp(weapon, Prop_Data, "m_iClip1", 0);
+
 	g_iAppliedReloadWeaponRef[client] = weaponRef;
 	g_iPendingReloadWeaponRef[client] = weaponRef;
-	g_iPendingReloadStartClip[client] = clip;
-	CalculateRealisticReloadFinalAmmo(classname, reserve, maxClip, g_iPendingReloadFinalClip[client], g_iPendingReloadFinalReserve[client]);
+	g_iPendingReloadStartClip[client] = 0;
+	g_iPendingReloadFinalClip[client] = finalClip;
+	g_iPendingReloadFinalReserve[client] = finalReserve;
 }
 
 void FinishPendingRealisticReload(int client, int weaponRef, int weapon)
@@ -177,12 +244,13 @@ void FinishPendingRealisticReload(int client, int weaponRef, int weapon)
 	}
 }
 
-void CalculateRealisticReloadFinalAmmo(const char[] classname, int reserve, int maxClip, int &finalClip, int &finalReserve)
+void CalculateRealisticReloadAmmo(const char[] classname, int reserve, int maxClip, int &finalClip, int &finalReserve, int &reserveBeforeEngineLoad)
 {
 	if (reserve < maxClip)
 	{
 		finalClip = reserve;
 		finalReserve = 0;
+		reserveBeforeEngineLoad = reserve;
 		return;
 	}
 
@@ -190,6 +258,10 @@ void CalculateRealisticReloadFinalAmmo(const char[] classname, int reserve, int 
 	finalReserve = reserve - maxClip;
 	if (g_cvAlignReserve.BoolValue)
 		finalReserve = AlignRealisticReloadReserve(finalReserve, maxClip, GetRealisticReloadMaxReserve(classname));
+
+	reserveBeforeEngineLoad = finalReserve + finalClip;
+	if (reserveBeforeEngineLoad > reserve)
+		reserveBeforeEngineLoad = reserve;
 }
 
 void ClearRealisticReloadState(int client)
@@ -199,6 +271,51 @@ void ClearRealisticReloadState(int client)
 	g_iPendingReloadStartClip[client] = 0;
 	g_iPendingReloadFinalClip[client] = 0;
 	g_iPendingReloadFinalReserve[client] = 0;
+}
+
+void RefillClientWeaponsForNewRound(int client)
+{
+	if (!IsValidAliveClient(client) || !ShouldApplyRealisticReloadToClient(client))
+		return;
+
+	RefillWeaponSlotForNewRound(client, 0);
+	RefillWeaponSlotForNewRound(client, 1);
+}
+
+void RefillWeaponSlotForNewRound(int client, int slot)
+{
+	int weapon = GetPlayerWeaponSlot(client, slot);
+	if (!IsValidEntity(weapon))
+		return;
+
+	if (!HasEntProp(weapon, Prop_Data, "m_iClip1"))
+		return;
+
+	char classname[64];
+	if (!GetEntityClassname(weapon, classname, sizeof(classname)))
+		return;
+
+	int maxClip = GetRealisticReloadMaxClip(classname);
+	int maxReserve = GetRealisticReloadMaxReserve(classname);
+	if (maxClip <= 0 || maxReserve <= 0)
+		return;
+
+	SetEntProp(weapon, Prop_Data, "m_iClip1", maxClip);
+	SetRealisticReloadReserveAmmo(client, weapon, maxReserve);
+}
+
+bool ShouldApplyRealisticReloadToClient(int client)
+{
+	if (!g_cvEnable.BoolValue)
+		return false;
+
+	bool isBot = IsFakeClient(client);
+	if (isBot && !g_cvBots.BoolValue)
+		return false;
+	if (!isBot && !g_cvHumans.BoolValue)
+		return false;
+
+	return true;
 }
 
 int AlignRealisticReloadReserve(int reserve, int maxClip, int maxReserve)

@@ -1,5 +1,12 @@
 # Changelog / 更新日志
 
+## 1.0.5
+
+- Discard the current clip immediately after CS:GO confirms reload start, preventing the HUD from showing vanilla ammo first and jumping later.
+- 在 CS:GO 确认换弹开始后立刻丢弃当前弹匣，避免 HUD 先显示原版弹药再后跳。
+- Clear reload state and refill carried primary/secondary weapons on new round/spawn to prevent previous-round low ammo from leaking into the next round.
+- 新回合/出生时清理换弹状态，并补满保留的主武器/手枪，避免上回合低弹药带入下一回合。
+
 ## 1.0.4
 
 - Replace reserve pre-deduction with a two-stage correction: record the expected final ammo when reload starts, then apply it only after CS:GO actually increases the clip.

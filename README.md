@@ -10,9 +10,9 @@ CSGO Realistic Reload is a small SourceMod plugin that makes partial reloads beh
 
 CSGO Realistic Reload 是一个轻量 SourceMod 插件，用来实现更拟真的“丢弃弹匣式换弹”。如果玩家在弹匣没打空时换弹，旧弹匣里剩下的子弹会从后备弹药中扣除。
 
-This keeps CS:GO's original reload animation and timing intact. The plugin does not force the clip to zero; it adjusts reserve ammo at the right moment so the final HUD result feels natural.
+This keeps CS:GO's original reload animation and timing intact. Once CS:GO confirms the reload has started, the plugin immediately treats the old magazine as discarded, sets the current clip to empty, and lets the game load the replacement magazine from the adjusted reserve ammo.
 
-插件会保留 CS:GO 原本的换弹动画和时序。它不会强行把当前弹匣清零，而是在合适时机扣除后备弹药，让最终 HUD 结果看起来和真实丢弃弹匣一致。
+插件会保留 CS:GO 原本的换弹动画和时序。只要 CS:GO 确认换弹已经开始，插件就会立刻把旧弹匣视为丢弃，将当前弹匣清空，并让游戏从调整后的后备弹药中装入新弹匣。
 
 ## Quick Example / 快速示例
 
@@ -28,23 +28,26 @@ With this plugin:
 AK-47: 25 / 90  -> reload -> 30 / 60
 ```
 
-Why? The 25 rounds left in the old magazine are discarded. The weapon still loads 5 rounds normally, so reserve ammo loses `25 + 5 = 30`.
+Why? The 25 rounds left in the old magazine are discarded, then a fresh 30-round magazine is loaded from reserve.
 
-原因：旧弹匣里剩下的 25 发被视为丢弃；游戏仍然正常补入 5 发，所以后备弹总共减少 `25 + 5 = 30`。
+原因：旧弹匣里剩下的 25 发被视为丢弃；随后从后备弹中装入一个新的 30 发弹匣。
 
 ## Highlights / 特性
 
 - Works for human players and bots.
 - 对人类玩家和 bot 都生效。
 
-- Deducts reserve ammo instead of directly rewriting the current clip.
-- 通过扣后备弹实现，不直接硬改当前弹匣。
+- Discards the current magazine as soon as reload really starts, so the HUD does not show vanilla ammo first and then jump later.
+- 在换弹真正开始时立刻丢弃当前弹匣，避免 HUD 先显示原版弹药再突然跳变。
 
 - Prevents repeated deductions during the same reload.
 - 同一次换弹只扣一次，避免重复扣弹。
 
 - Keeps reserve ammo aligned to each weapon's default reserve cadence by default.
 - 默认让后备弹按每把武器的默认备弹节奏对齐，避免 AK 出现 `30/15` 这类不自然状态，同时保留 FAMAS `90 -> 65 -> 40 -> 15 -> 0` 这种原版节奏。
+
+- Clears plugin reload state and refills carried weapons at new round/spawn.
+- 新回合/出生时清理插件换弹状态，并补满玩家保留的武器，避免上回合低弹药带入新回合。
 
 - Excludes shell-by-shell shotguns by default.
 - 默认排除逐发装填霰弹枪。
@@ -120,9 +123,9 @@ sm_realistic_reload_exclude_shotguns "1"
 
 ## Behavior Details / 行为细节
 
-The plugin waits until CS:GO reports that the active weapon is actually reloading, records the final ammo that a discarded-magazine reload should produce, and applies that final ammo only after the game really increases the clip. This avoids punishing canceled reloads while keeping the final HUD result deterministic.
+The plugin waits until CS:GO reports that the active weapon is actually reloading. It then empties the current clip, adjusts reserve ammo to the amount the engine should consume, and keeps a final correction as a safety net. Because the old magazine is discarded at reload start, canceled reloads after that point still lose the old magazine.
 
-插件会等到 CS:GO 确认当前武器已经进入换弹状态，先记录这次“丢弃弹匣式换弹”应该得到的最终弹药；只有当游戏确实增加了弹匣子弹后，才写入最终弹药。这样不会惩罚取消换弹，同时保证最终 HUD 结果稳定。
+插件会等到 CS:GO 确认当前武器已经进入换弹状态，然后清空当前弹匣，把后备弹调整到引擎应该消耗后的数量，并保留一次最终校正作为兜底。因为旧弹匣在换弹开始时已经被丢弃，所以这个时间点之后取消换弹也会失去旧弹匣。
 
 With reserve alignment enabled, the final reserve ammo is rounded down to the weapon's default reserve cadence whenever possible. For weapons whose default reserve is not a clean multiple of clip size, that remainder is preserved.
 
