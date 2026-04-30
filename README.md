@@ -134,6 +134,7 @@ Glock: 16 / 120 -> 20 / 100
 AK-47: 15 / 45  -> 30 / 0
 FAMAS: 0 / 90   -> 25 / 65
 AWP:   4 / 5    -> 5 / 0
+FAMAS: 1 / 15   -> 15 / 0
 ```
 
 Shotguns are excluded by default because weapons like Nova, MAG-7, Sawed-Off, and XM1014 do not behave like detachable-magazine weapons in gameplay.

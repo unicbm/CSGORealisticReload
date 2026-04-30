@@ -1,5 +1,12 @@
 # Changelog / 更新日志
 
+## 1.0.2
+
+- Use the player's authoritative ammo pool before weapon reserve props, fixing cases where CS:GO ignored the reserve deduction.
+- 优先读写玩家真实后备弹药池，而不是武器实体上的 reserve prop，修复 CS:GO 忽略扣弹的问题。
+- Correct final partial magazines after reload, such as FAMAS `1/15 -> 15/0`.
+- 修正最后一个不完整弹匣的换弹结果，例如 FAMAS `1/15 -> 15/0`。
+
 ## 1.0.1
 
 - Fix reserve alignment for weapons whose default reserve is not a clip-size multiple, such as FAMAS `25/90`.

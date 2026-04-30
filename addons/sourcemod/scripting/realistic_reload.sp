@@ -4,7 +4,7 @@
 #include <sourcemod>
 #include <sdktools>
 
-#define PLUGIN_VERSION "1.0.1"
+#define PLUGIN_VERSION "1.0.2"
 
 ConVar g_cvEnable;
 ConVar g_cvHumans;
@@ -13,6 +13,8 @@ ConVar g_cvAlignReserve;
 ConVar g_cvExcludeShotguns;
 
 int g_iAppliedReloadWeaponRef[MAXPLAYERS + 1];
+int g_iPendingReloadWeaponRef[MAXPLAYERS + 1];
+int g_iPendingReloadClip[MAXPLAYERS + 1];
 
 public Plugin myinfo =
 {
@@ -34,17 +36,25 @@ public void OnPluginStart()
 	AutoExecConfig(true, "realistic_reload");
 
 	for (int client = 1; client <= MaxClients; client++)
+	{
 		g_iAppliedReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
+		g_iPendingReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
+		g_iPendingReloadClip[client] = 0;
+	}
 }
 
 public void OnClientPutInServer(int client)
 {
 	g_iAppliedReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
+	g_iPendingReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
+	g_iPendingReloadClip[client] = 0;
 }
 
 public void OnClientDisconnect(int client)
 {
 	g_iAppliedReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
+	g_iPendingReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
+	g_iPendingReloadClip[client] = 0;
 }
 
 public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon, int &subtype, int &cmdnum, int &tickcount, int &seed, int mouse[2])
@@ -77,6 +87,7 @@ void TryApplyRealisticReload(int client)
 	int weaponRef = EntIndexToEntRef(weapon);
 	if (!inReload)
 	{
+		FinishPendingRealisticReload(client, weaponRef, weapon);
 		g_iAppliedReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
 		return;
 	}
@@ -105,6 +116,10 @@ void TryApplyRealisticReload(int client)
 
 	int missing = maxClip - clip;
 	int reserveBeforeEngineLoad;
+	int pendingFinalClip = 0;
+
+	if (reserve < maxClip)
+		pendingFinalClip = reserve;
 
 	if (g_cvAlignReserve.BoolValue)
 	{
@@ -121,20 +136,62 @@ void TryApplyRealisticReload(int client)
 	{
 		int extraReserve = reserve - missing;
 		if (extraReserve <= 0)
-			return;
+		{
+			reserveBeforeEngineLoad = reserve;
+		}
+		else
+		{
+			int penalty = clip;
+			if (penalty > extraReserve)
+				penalty = extraReserve;
 
-		int penalty = clip;
-		if (penalty > extraReserve)
-			penalty = extraReserve;
-
-		reserveBeforeEngineLoad = reserve - penalty;
+			reserveBeforeEngineLoad = reserve - penalty;
+		}
 	}
 
-	if (reserveBeforeEngineLoad >= reserve)
+	bool adjustFinalClip = pendingFinalClip > 0 && pendingFinalClip < maxClip;
+	if (reserveBeforeEngineLoad >= reserve && !adjustFinalClip)
 		return;
 
-	SetRealisticReloadReserveAmmo(client, weapon, reserveBeforeEngineLoad);
+	if (reserveBeforeEngineLoad < reserve)
+		SetRealisticReloadReserveAmmo(client, weapon, reserveBeforeEngineLoad);
+
 	g_iAppliedReloadWeaponRef[client] = weaponRef;
+
+	if (adjustFinalClip)
+	{
+		g_iPendingReloadWeaponRef[client] = weaponRef;
+		g_iPendingReloadClip[client] = pendingFinalClip;
+	}
+	else
+	{
+		g_iPendingReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
+		g_iPendingReloadClip[client] = 0;
+	}
+}
+
+void FinishPendingRealisticReload(int client, int weaponRef, int weapon)
+{
+	if (g_iPendingReloadWeaponRef[client] == INVALID_ENT_REFERENCE)
+		return;
+
+	if (g_iPendingReloadWeaponRef[client] != weaponRef)
+	{
+		g_iPendingReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
+		g_iPendingReloadClip[client] = 0;
+		return;
+	}
+
+	int pendingClip = g_iPendingReloadClip[client];
+	g_iPendingReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
+	g_iPendingReloadClip[client] = 0;
+
+	if (pendingClip <= 0 || !HasEntProp(weapon, Prop_Data, "m_iClip1"))
+		return;
+
+	int clip = GetEntProp(weapon, Prop_Data, "m_iClip1");
+	if (clip > pendingClip)
+		SetEntProp(weapon, Prop_Data, "m_iClip1", pendingClip);
 }
 
 int AlignRealisticReloadReserve(int reserve, int maxClip, int maxReserve)
@@ -157,51 +214,48 @@ int AlignRealisticReloadReserve(int reserve, int maxClip, int maxReserve)
 
 int GetRealisticReloadReserveAmmo(int client, int weapon)
 {
+	int reserve = 0;
+	if (GetWeaponPlayerAmmo(client, weapon, reserve))
+		return reserve;
+
 	if (HasEntProp(weapon, Prop_Send, "m_iPrimaryReserveAmmoCount"))
 		return GetEntProp(weapon, Prop_Send, "m_iPrimaryReserveAmmoCount");
 
 	if (HasEntProp(weapon, Prop_Data, "m_iPrimaryReserveAmmoCount"))
 		return GetEntProp(weapon, Prop_Data, "m_iPrimaryReserveAmmoCount");
 
-	int reserve = 0;
-	GetWeaponPlayerAmmo(client, weapon, reserve);
 	return reserve;
 }
 
 void SetRealisticReloadReserveAmmo(int client, int weapon, int reserve)
 {
+	SetWeaponPlayerAmmo(client, weapon, reserve);
+
 	if (HasEntProp(weapon, Prop_Send, "m_iPrimaryReserveAmmoCount"))
-	{
 		SetEntProp(weapon, Prop_Send, "m_iPrimaryReserveAmmoCount", reserve);
-		return;
-	}
 
 	if (HasEntProp(weapon, Prop_Data, "m_iPrimaryReserveAmmoCount"))
-	{
 		SetEntProp(weapon, Prop_Data, "m_iPrimaryReserveAmmoCount", reserve);
-		return;
-	}
-
-	SetWeaponPlayerAmmo(client, weapon, reserve);
 }
 
-void GetWeaponPlayerAmmo(int client, int weapon, int &primaryAmmo)
+bool GetWeaponPlayerAmmo(int client, int weapon, int &primaryAmmo)
 {
 	int ammoOffset = FindDataMapInfo(client, "m_iAmmo");
 	if (ammoOffset == -1 || !HasEntProp(weapon, Prop_Data, "m_iPrimaryAmmoType"))
 	{
 		primaryAmmo = 0;
-		return;
+		return false;
 	}
 
 	int ammoType = GetEntProp(weapon, Prop_Data, "m_iPrimaryAmmoType");
 	if (ammoType < 0)
 	{
 		primaryAmmo = 0;
-		return;
+		return false;
 	}
 
 	primaryAmmo = GetEntData(client, ammoOffset + (ammoType * 4));
+	return true;
 }
 
 void SetWeaponPlayerAmmo(int client, int weapon, int primaryAmmo)
