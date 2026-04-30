@@ -14,6 +14,95 @@ ConVar g_cvExcludeShotguns;
 
 int g_iAppliedReloadWeaponRef[MAXPLAYERS + 1];
 
+enum
+{
+	DefIndexSpec_DefIndex,
+	DefIndexSpec_MaxClip,
+	DefIndexSpec_MaxReserve
+};
+
+enum
+{
+	ClassnameSpec_MaxClip,
+	ClassnameSpec_MaxReserve
+};
+
+static const int g_iDefIndexAmmoSpecs[][] =
+{
+	{ 60, 20, 80 }, // M4A1-S may use weapon_m4a1 as classname on some servers.
+	{ 61, 12, 24 }, // USP-S can appear as weapon_hkp2000.
+	{ 63, 12, 12 }, // CZ75-Auto.
+	{ 64, 8, 8 }    // R8 Revolver.
+};
+
+static const char g_sClassnameAmmoSpecs[][] =
+{
+	"weapon_deagle",
+	"weapon_elite",
+	"weapon_fiveseven",
+	"weapon_glock",
+	"weapon_ak47",
+	"weapon_aug",
+	"weapon_awp",
+	"weapon_famas",
+	"weapon_g3sg1",
+	"weapon_galilar",
+	"weapon_m249",
+	"weapon_m4a1",
+	"weapon_mac10",
+	"weapon_p90",
+	"weapon_mp5sd",
+	"weapon_ump45",
+	"weapon_bizon",
+	"weapon_negev",
+	"weapon_tec9",
+	"weapon_hkp2000",
+	"weapon_mp7",
+	"weapon_mp9",
+	"weapon_p250",
+	"weapon_scar20",
+	"weapon_sg556",
+	"weapon_ssg08",
+	"weapon_m4a1_silencer",
+	"weapon_usp_silencer",
+	"weapon_cz75a",
+	"weapon_revolver"
+};
+
+static const int g_iClassnameAmmoSpecs[][] =
+{
+	{ 7, 35 },    // weapon_deagle
+	{ 30, 120 },  // weapon_elite
+	{ 20, 100 },  // weapon_fiveseven
+	{ 20, 120 },  // weapon_glock
+	{ 30, 90 },   // weapon_ak47
+	{ 30, 90 },   // weapon_aug
+	{ 5, 40 },    // weapon_awp
+	{ 25, 90 },   // weapon_famas
+	{ 20, 90 },   // weapon_g3sg1
+	{ 35, 90 },   // weapon_galilar
+	{ 100, 200 }, // weapon_m249
+	{ 30, 90 },   // weapon_m4a1
+	{ 30, 100 },  // weapon_mac10
+	{ 50, 100 },  // weapon_p90
+	{ 30, 120 },  // weapon_mp5sd
+	{ 25, 100 },  // weapon_ump45
+	{ 64, 120 },  // weapon_bizon
+	{ 150, 200 }, // weapon_negev
+	{ 18, 90 },   // weapon_tec9
+	{ 13, 52 },   // weapon_hkp2000
+	{ 30, 120 },  // weapon_mp7
+	{ 30, 120 },  // weapon_mp9
+	{ 13, 26 },   // weapon_p250
+	{ 20, 90 },   // weapon_scar20
+	{ 30, 90 },   // weapon_sg556
+	{ 10, 90 },   // weapon_ssg08
+	{ 20, 80 },   // weapon_m4a1_silencer
+	{ 12, 24 },   // weapon_usp_silencer
+	{ 12, 12 },   // weapon_cz75a
+	{ 8, 8 }      // weapon_revolver
+};
+
 public Plugin myinfo =
 {
 	name = "Realistic Reload",
@@ -252,84 +341,49 @@ bool IsRealisticReloadShotgun(const char[] classname)
 
 int GetRealisticReloadMaxClip(const char[] classname, int defIndex = -1)
 {
-	if (defIndex == 60) return 20; // M4A1-S may use weapon_m4a1 as classname on some servers.
-	if (defIndex == 61) return 12; // USP-S can appear as weapon_hkp2000.
-	if (defIndex == 63) return 12; // CZ75-Auto.
-	if (defIndex == 64) return 8;  // R8 Revolver.
-
-	if (strcmp(classname, "weapon_deagle", false) == 0) return 7;
-	if (strcmp(classname, "weapon_elite", false) == 0) return 30;
-	if (strcmp(classname, "weapon_fiveseven", false) == 0) return 20;
-	if (strcmp(classname, "weapon_glock", false) == 0) return 20;
-	if (strcmp(classname, "weapon_ak47", false) == 0) return 30;
-	if (strcmp(classname, "weapon_aug", false) == 0) return 30;
-	if (strcmp(classname, "weapon_awp", false) == 0) return 5;
-	if (strcmp(classname, "weapon_famas", false) == 0) return 25;
-	if (strcmp(classname, "weapon_g3sg1", false) == 0) return 20;
-	if (strcmp(classname, "weapon_galilar", false) == 0) return 35;
-	if (strcmp(classname, "weapon_m249", false) == 0) return 100;
-	if (strcmp(classname, "weapon_m4a1", false) == 0) return 30;
-	if (strcmp(classname, "weapon_mac10", false) == 0) return 30;
-	if (strcmp(classname, "weapon_p90", false) == 0) return 50;
-	if (strcmp(classname, "weapon_mp5sd", false) == 0) return 30;
-	if (strcmp(classname, "weapon_ump45", false) == 0) return 25;
-	if (strcmp(classname, "weapon_bizon", false) == 0) return 64;
-	if (strcmp(classname, "weapon_negev", false) == 0) return 150;
-	if (strcmp(classname, "weapon_tec9", false) == 0) return 18;
-	if (strcmp(classname, "weapon_hkp2000", false) == 0) return 13;
-	if (strcmp(classname, "weapon_mp7", false) == 0) return 30;
-	if (strcmp(classname, "weapon_mp9", false) == 0) return 30;
-	if (strcmp(classname, "weapon_p250", false) == 0) return 13;
-	if (strcmp(classname, "weapon_scar20", false) == 0) return 20;
-	if (strcmp(classname, "weapon_sg556", false) == 0) return 30;
-	if (strcmp(classname, "weapon_ssg08", false) == 0) return 10;
-	if (strcmp(classname, "weapon_m4a1_silencer", false) == 0) return 20;
-	if (strcmp(classname, "weapon_usp_silencer", false) == 0) return 12;
-	if (strcmp(classname, "weapon_cz75a", false) == 0) return 12;
-	if (strcmp(classname, "weapon_revolver", false) == 0) return 8;
+	int maxClip;
+	int maxReserve;
+	if (GetRealisticReloadAmmoSpec(classname, defIndex, maxClip, maxReserve))
+		return maxClip;
 
 	return 0;
 }
 
 int GetRealisticReloadMaxReserve(const char[] classname, int defIndex = -1)
 {
-	if (defIndex == 60) return 80;
-	if (defIndex == 61) return 24;
-	if (defIndex == 63) return 12;
-	if (defIndex == 64) return 8;
-
-	if (strcmp(classname, "weapon_deagle", false) == 0) return 35;
-	if (strcmp(classname, "weapon_elite", false) == 0) return 120;
-	if (strcmp(classname, "weapon_fiveseven", false) == 0) return 100;
-	if (strcmp(classname, "weapon_glock", false) == 0) return 120;
-	if (strcmp(classname, "weapon_ak47", false) == 0) return 90;
-	if (strcmp(classname, "weapon_aug", false) == 0) return 90;
-	if (strcmp(classname, "weapon_awp", false) == 0) return 40;
-	if (strcmp(classname, "weapon_famas", false) == 0) return 90;
-	if (strcmp(classname, "weapon_g3sg1", false) == 0) return 90;
-	if (strcmp(classname, "weapon_galilar", false) == 0) return 90;
-	if (strcmp(classname, "weapon_m249", false) == 0) return 200;
-	if (strcmp(classname, "weapon_m4a1", false) == 0) return 90;
-	if (strcmp(classname, "weapon_mac10", false) == 0) return 100;
-	if (strcmp(classname, "weapon_p90", false) == 0) return 100;
-	if (strcmp(classname, "weapon_mp5sd", false) == 0) return 120;
-	if (strcmp(classname, "weapon_ump45", false) == 0) return 100;
-	if (strcmp(classname, "weapon_bizon", false) == 0) return 120;
-	if (strcmp(classname, "weapon_negev", false) == 0) return 200;
-	if (strcmp(classname, "weapon_tec9", false) == 0) return 90;
-	if (strcmp(classname, "weapon_hkp2000", false) == 0) return 52;
-	if (strcmp(classname, "weapon_mp7", false) == 0) return 120;
-	if (strcmp(classname, "weapon_mp9", false) == 0) return 120;
-	if (strcmp(classname, "weapon_p250", false) == 0) return 26;
-	if (strcmp(classname, "weapon_scar20", false) == 0) return 90;
-	if (strcmp(classname, "weapon_sg556", false) == 0) return 90;
-	if (strcmp(classname, "weapon_ssg08", false) == 0) return 90;
-	if (strcmp(classname, "weapon_m4a1_silencer", false) == 0) return 80;
-	if (strcmp(classname, "weapon_usp_silencer", false) == 0) return 24;
-	if (strcmp(classname, "weapon_cz75a", false) == 0) return 12;
-	if (strcmp(classname, "weapon_revolver", false) == 0) return 8;
+	int maxClip;
+	int maxReserve;
+	if (GetRealisticReloadAmmoSpec(classname, defIndex, maxClip, maxReserve))
+		return maxReserve;
 
 	return 0;
+}
+
+bool GetRealisticReloadAmmoSpec(const char[] classname, int defIndex, int &maxClip, int &maxReserve)
+{
+	for (int i = 0; i < sizeof(g_iDefIndexAmmoSpecs); i++)
+	{
+		if (g_iDefIndexAmmoSpecs[i][DefIndexSpec_DefIndex] != defIndex)
+			continue;
+
+		maxClip = g_iDefIndexAmmoSpecs[i][DefIndexSpec_MaxClip];
+		maxReserve = g_iDefIndexAmmoSpecs[i][DefIndexSpec_MaxReserve];
+		return true;
+	}
+
+	for (int i = 0; i < sizeof(g_sClassnameAmmoSpecs); i++)
+	{
+		if (strcmp(classname, g_sClassnameAmmoSpecs[i], false) != 0)
+			continue;
+
+		maxClip = g_iClassnameAmmoSpecs[i][ClassnameSpec_MaxClip];
+		maxReserve = g_iClassnameAmmoSpecs[i][ClassnameSpec_MaxReserve];
+		return true;
+	}
+
+	maxClip = 0;
+	maxReserve = 0;
+	return false;
 }
 
 bool IsValidAliveClient(int client)
