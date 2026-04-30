@@ -1,3 +1,4 @@
 addons/sourcemod/plugins/*.smx
+!addons/sourcemod/plugins/realistic_reload.smx
 *.log
 *.tmp

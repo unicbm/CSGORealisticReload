@@ -45,8 +45,8 @@ sm_realistic_reload_exclude_shotguns "1"
 
 ## 安装
 
-1. 编译 `addons/sourcemod/scripting/realistic_reload.sp`。
-2. 将 `addons/sourcemod/plugins/realistic_reload.smx` 放到服务器的 `addons/sourcemod/plugins/`。
+1. 下载或复制 `addons/sourcemod/plugins/realistic_reload.smx`。
+2. 将它放到服务器的 `addons/sourcemod/plugins/`。
 3. 重启服务器、换图，或执行 `sm plugins load realistic_reload`。
 
 ## 编译
@@ -118,8 +118,8 @@ sm_realistic_reload_exclude_shotguns "1"
 
 ## Installation
 
-1. Compile `addons/sourcemod/scripting/realistic_reload.sp`.
-2. Copy `addons/sourcemod/plugins/realistic_reload.smx` to the server's `addons/sourcemod/plugins/`.
+1. Download or copy `addons/sourcemod/plugins/realistic_reload.smx`.
+2. Put it in the server's `addons/sourcemod/plugins/`.
 3. Restart the server, change map, or run `sm plugins load realistic_reload`.
 
 ## Build
