@@ -1,11 +1,6 @@
 # Changelog / 更新日志
 
-## 1.0.1-debug2
-
-- Add one-shot `weapon_change` debug lines so buy/pickup/switch state can be diagnosed before reload logic runs.
-- 增加一次性的 `weapon_change` debug 行，用于在换弹逻辑执行前排查购买、拾取、切枪时的武器初始弹药状态。
-
-## 1.0.1-debug1
+## 1.0.1
 
 - Preserve each weapon's default reserve cadence when aligning reserve ammo, fixing FAMAS/Galil-style reserve sequences such as FAMAS `90 -> 65 -> 40 -> 15 -> 0`.
 - 对齐后备弹时保留每把武器默认备弹节奏，修复 FAMAS/Galil 这类序列，例如 FAMAS `90 -> 65 -> 40 -> 15 -> 0`。
@@ -13,10 +8,8 @@
 - 对 classname 有歧义的武器优先使用 item definition index，例如 USP-S 显示为 `weapon_hkp2000` 的情况。
 - Apply the final partial magazine directly so cases like Galil `1/20` become `20/0` instead of inheriting the old clip.
 - 最后一匣非满弹匣时直接应用结果，避免 Galil `1/20` 这类情况继承旧弹匣变成错误数值。
-- Throttle repeated skip debug lines so reload-state skips do not spam every tick.
-- 限制重复 skip debug 行，避免换弹期间每 tick 刷屏。
-- Keep debug logging enabled for further reload-source diagnosis.
-- 保留 debug 日志，继续用于确认换弹参数来源。
+- Remove temporary reload debug logging from the release build.
+- 从发布版本移除临时换弹 debug 日志。
 
 ## 1.0.0-debug1
 
