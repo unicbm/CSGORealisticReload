@@ -43,8 +43,8 @@ Why? The 25 rounds left in the old magazine are discarded. The weapon still load
 - Prevents repeated deductions during the same reload.
 - 同一次换弹只扣一次，避免重复扣弹。
 
-- Keeps reserve ammo aligned to full-magazine multiples by default.
-- 默认让后备弹保持整弹匣倍数，避免出现 `30/15` 这类不自然状态。
+- Keeps reserve ammo aligned to each weapon's default reserve cadence by default.
+- 默认让后备弹按每把武器的默认备弹节奏对齐，避免 AK 出现 `30/15` 这类不自然状态，同时保留 FAMAS `90 -> 65 -> 40 -> 15 -> 0` 这种原版节奏。
 
 - Excludes shell-by-shell shotguns by default.
 - 默认排除逐发装填霰弹枪。
@@ -109,8 +109,8 @@ sm_realistic_reload_humans "1"
 // 对 bot 生效。
 sm_realistic_reload_bots "1"
 
-// Keep reserve ammo aligned to full-magazine multiples.
-// 让后备弹保持整弹匣倍数。
+// Keep reserve ammo aligned to each weapon's default reserve cadence.
+// 让后备弹按每把武器的默认备弹节奏对齐。
 sm_realistic_reload_align_reserve "1"
 
 // Keep shell-by-shell shotgun reload behavior unchanged.
@@ -124,14 +124,16 @@ The plugin waits until CS:GO reports that the active weapon is actually reloadin
 
 插件会等到 CS:GO 确认当前武器已经进入换弹状态，再对这一次换弹扣除一次后备弹。这样不会和游戏原本的换弹动画或预测逻辑冲突。
 
-With reserve alignment enabled, the final reserve ammo is rounded down to a full-magazine boundary whenever possible:
+With reserve alignment enabled, the final reserve ammo is rounded down to the weapon's default reserve cadence whenever possible. For weapons whose default reserve is not a clean multiple of clip size, that remainder is preserved.
 
-启用后备弹对齐时，最终后备弹会尽量向下对齐到整弹匣边界：
+启用后备弹对齐时，最终后备弹会尽量向下对齐到该武器的默认备弹节奏。对于默认备弹不是弹匣容量整数倍的武器，会保留这个余数。
 
 ```text
 AK-47: 25 / 90  -> 30 / 60
 Glock: 16 / 120 -> 20 / 100
 AK-47: 15 / 45  -> 30 / 0
+FAMAS: 0 / 90   -> 25 / 65
+AWP:   4 / 5    -> 5 / 0
 ```
 
 Shotguns are excluded by default because weapons like Nova, MAG-7, Sawed-Off, and XM1014 do not behave like detachable-magazine weapons in gameplay.

@@ -4,7 +4,7 @@
 #include <sourcemod>
 #include <sdktools>
 
-#define PLUGIN_VERSION "1.0.0"
+#define PLUGIN_VERSION "1.0.1"
 
 ConVar g_cvEnable;
 ConVar g_cvHumans;
@@ -28,7 +28,7 @@ public void OnPluginStart()
 	g_cvEnable = CreateConVar("sm_realistic_reload_enable", "1", "Enable realistic reload reserve deduction.", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	g_cvHumans = CreateConVar("sm_realistic_reload_humans", "1", "Apply realistic reload to human players.", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	g_cvBots = CreateConVar("sm_realistic_reload_bots", "1", "Apply realistic reload to bots.", FCVAR_NOTIFY, true, 0.0, true, 1.0);
-	g_cvAlignReserve = CreateConVar("sm_realistic_reload_align_reserve", "1", "Align reserve ammo to full-magazine multiples after reload.", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+	g_cvAlignReserve = CreateConVar("sm_realistic_reload_align_reserve", "1", "Align reserve ammo to each weapon's default reserve cadence after reload.", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	g_cvExcludeShotguns = CreateConVar("sm_realistic_reload_exclude_shotguns", "1", "Keep shell-by-shell shotgun reload behavior unchanged.", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 
 	AutoExecConfig(true, "realistic_reload");
@@ -111,7 +111,7 @@ void TryApplyRealisticReload(int client)
 		int targetReserveAfterReload = reserve - maxClip;
 		if (targetReserveAfterReload < 0)
 			targetReserveAfterReload = 0;
-		targetReserveAfterReload = (targetReserveAfterReload / maxClip) * maxClip;
+		targetReserveAfterReload = AlignRealisticReloadReserve(targetReserveAfterReload, maxClip, GetRealisticReloadMaxReserve(classname));
 
 		reserveBeforeEngineLoad = targetReserveAfterReload + missing;
 		if (reserveBeforeEngineLoad > reserve)
@@ -135,6 +135,24 @@ void TryApplyRealisticReload(int client)
 
 	SetRealisticReloadReserveAmmo(client, weapon, reserveBeforeEngineLoad);
 	g_iAppliedReloadWeaponRef[client] = weaponRef;
+}
+
+int AlignRealisticReloadReserve(int reserve, int maxClip, int maxReserve)
+{
+	if (reserve <= 0)
+		return 0;
+
+	if (maxClip <= 0 || maxReserve <= 0)
+		return reserve;
+
+	int remainder = maxReserve % maxClip;
+	if (remainder == 0)
+		return (reserve / maxClip) * maxClip;
+
+	if (reserve < remainder)
+		return 0;
+
+	return remainder + (((reserve - remainder) / maxClip) * maxClip);
 }
 
 int GetRealisticReloadReserveAmmo(int client, int weapon)
@@ -221,7 +239,7 @@ int GetRealisticReloadMaxClip(const char[] classname)
 	if (strcmp(classname, "weapon_glock", false) == 0) return 20;
 	if (strcmp(classname, "weapon_ak47", false) == 0) return 30;
 	if (strcmp(classname, "weapon_aug", false) == 0) return 30;
-	if (strcmp(classname, "weapon_awp", false) == 0) return 10;
+	if (strcmp(classname, "weapon_awp", false) == 0) return 5;
 	if (strcmp(classname, "weapon_famas", false) == 0) return 25;
 	if (strcmp(classname, "weapon_g3sg1", false) == 0) return 20;
 	if (strcmp(classname, "weapon_galilar", false) == 0) return 35;
@@ -241,8 +259,44 @@ int GetRealisticReloadMaxClip(const char[] classname)
 	if (strcmp(classname, "weapon_scar20", false) == 0) return 20;
 	if (strcmp(classname, "weapon_sg556", false) == 0) return 30;
 	if (strcmp(classname, "weapon_ssg08", false) == 0) return 10;
-	if (strcmp(classname, "weapon_m4a1_silencer", false) == 0) return 25;
+	if (strcmp(classname, "weapon_m4a1_silencer", false) == 0) return 20;
 	if (strcmp(classname, "weapon_usp_silencer", false) == 0) return 12;
+	if (strcmp(classname, "weapon_cz75a", false) == 0) return 12;
+	if (strcmp(classname, "weapon_revolver", false) == 0) return 8;
+
+	return 0;
+}
+
+int GetRealisticReloadMaxReserve(const char[] classname)
+{
+	if (strcmp(classname, "weapon_deagle", false) == 0) return 35;
+	if (strcmp(classname, "weapon_elite", false) == 0) return 120;
+	if (strcmp(classname, "weapon_fiveseven", false) == 0) return 100;
+	if (strcmp(classname, "weapon_glock", false) == 0) return 120;
+	if (strcmp(classname, "weapon_ak47", false) == 0) return 90;
+	if (strcmp(classname, "weapon_aug", false) == 0) return 90;
+	if (strcmp(classname, "weapon_awp", false) == 0) return 40;
+	if (strcmp(classname, "weapon_famas", false) == 0) return 90;
+	if (strcmp(classname, "weapon_g3sg1", false) == 0) return 90;
+	if (strcmp(classname, "weapon_galilar", false) == 0) return 90;
+	if (strcmp(classname, "weapon_m249", false) == 0) return 200;
+	if (strcmp(classname, "weapon_m4a1", false) == 0) return 90;
+	if (strcmp(classname, "weapon_mac10", false) == 0) return 100;
+	if (strcmp(classname, "weapon_p90", false) == 0) return 100;
+	if (strcmp(classname, "weapon_mp5sd", false) == 0) return 120;
+	if (strcmp(classname, "weapon_ump45", false) == 0) return 100;
+	if (strcmp(classname, "weapon_bizon", false) == 0) return 120;
+	if (strcmp(classname, "weapon_negev", false) == 0) return 200;
+	if (strcmp(classname, "weapon_tec9", false) == 0) return 90;
+	if (strcmp(classname, "weapon_hkp2000", false) == 0) return 52;
+	if (strcmp(classname, "weapon_mp7", false) == 0) return 120;
+	if (strcmp(classname, "weapon_mp9", false) == 0) return 120;
+	if (strcmp(classname, "weapon_p250", false) == 0) return 26;
+	if (strcmp(classname, "weapon_scar20", false) == 0) return 90;
+	if (strcmp(classname, "weapon_sg556", false) == 0) return 90;
+	if (strcmp(classname, "weapon_ssg08", false) == 0) return 90;
+	if (strcmp(classname, "weapon_m4a1_silencer", false) == 0) return 80;
+	if (strcmp(classname, "weapon_usp_silencer", false) == 0) return 24;
 	if (strcmp(classname, "weapon_cz75a", false) == 0) return 12;
 	if (strcmp(classname, "weapon_revolver", false) == 0) return 8;
 
