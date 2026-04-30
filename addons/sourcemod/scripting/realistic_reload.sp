@@ -4,7 +4,7 @@
 #include <sourcemod>
 #include <sdktools>
 
-#define PLUGIN_VERSION "1.0.0-debug1"
+#define PLUGIN_VERSION "1.0.1-debug1"
 
 ConVar g_cvEnable;
 ConVar g_cvHumans;
@@ -107,7 +107,8 @@ void TryApplyRealisticReload(int client, int buttons, int cmdnum, int tickcount)
 	if (g_cvExcludeShotguns.BoolValue && IsRealisticReloadShotgun(classname))
 		return;
 
-	int maxClip = GetRealisticReloadMaxClip(classname);
+	int defIndex = HasEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex") ? GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex") : -1;
+	int maxClip = GetRealisticReloadMaxClip(classname, defIndex);
 	if (maxClip <= 0)
 	{
 		DebugMaybePrintState(client, weapon, "skip_unknown_weapon", buttons, cmdnum, tickcount, maxClip, -1, -1, -1, false, true);
@@ -117,14 +118,14 @@ void TryApplyRealisticReload(int client, int buttons, int cmdnum, int tickcount)
 	int clip = GetEntProp(weapon, Prop_Data, "m_iClip1");
 	if (clip <= 0 || clip >= maxClip)
 	{
-		DebugMaybePrintState(client, weapon, "skip_empty_or_full", buttons, cmdnum, tickcount, maxClip, -1, -1, -1, false, true);
+		DebugMaybePrintState(client, weapon, "skip_empty_or_full", buttons, cmdnum, tickcount, maxClip, -1, -1, -1, false, false);
 		return;
 	}
 
 	int reserve = GetRealisticReloadReserveAmmo(client, weapon);
 	if (reserve <= 0)
 	{
-		DebugMaybePrintState(client, weapon, "skip_no_reserve", buttons, cmdnum, tickcount, maxClip, reserve, -1, -1, false, true);
+		DebugMaybePrintState(client, weapon, "skip_no_reserve", buttons, cmdnum, tickcount, maxClip, reserve, -1, -1, false, false);
 		return;
 	}
 
@@ -136,7 +137,16 @@ void TryApplyRealisticReload(int client, int buttons, int cmdnum, int tickcount)
 		int targetReserveAfterReload = reserve - maxClip;
 		if (targetReserveAfterReload < 0)
 			targetReserveAfterReload = 0;
-		targetReserveAfterReload = (targetReserveAfterReload / maxClip) * maxClip;
+		targetReserveAfterReload = AlignRealisticReloadReserve(targetReserveAfterReload, maxClip, GetRealisticReloadMaxReserve(classname, defIndex));
+		if (targetReserveAfterReload == 0 && reserve <= maxClip)
+		{
+			DebugMaybePrintState(client, weapon, "apply_final_before", buttons, cmdnum, tickcount, maxClip, reserve, missing, 0, true, true);
+			SetEntProp(weapon, Prop_Data, "m_iClip1", reserve);
+			SetRealisticReloadReserveAmmo(client, weapon, 0);
+			DebugMaybePrintState(client, weapon, "apply_final_after", buttons, cmdnum, tickcount, maxClip, 0, missing, 0, true, true);
+			g_iAppliedReloadWeaponRef[client] = weaponRef;
+			return;
+		}
 
 		reserveBeforeEngineLoad = targetReserveAfterReload + missing;
 		if (reserveBeforeEngineLoad > reserve)
@@ -160,7 +170,7 @@ void TryApplyRealisticReload(int client, int buttons, int cmdnum, int tickcount)
 
 	if (reserveBeforeEngineLoad >= reserve)
 	{
-		DebugMaybePrintState(client, weapon, "skip_no_penalty", buttons, cmdnum, tickcount, maxClip, reserve, missing, reserveBeforeEngineLoad, false, true);
+		DebugMaybePrintState(client, weapon, "skip_no_penalty", buttons, cmdnum, tickcount, maxClip, reserve, missing, reserveBeforeEngineLoad, false, false);
 		return;
 	}
 
@@ -201,7 +211,7 @@ void DebugMaybePrintState(int client, int weapon, const char[] reason, int butto
 
 	int defIndex = HasEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex") ? GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex") : -1;
 	if (maxClip < 0)
-		maxClip = GetRealisticReloadMaxClip(classname);
+		maxClip = GetRealisticReloadMaxClip(classname, defIndex);
 	if (reserveUsed < 0)
 		reserveUsed = GetRealisticReloadReserveAmmo(client, weapon);
 
@@ -335,6 +345,24 @@ bool GetWeaponPlayerAmmoDebug(int client, int weapon, int &primaryAmmo, int &amm
 	return true;
 }
 
+int AlignRealisticReloadReserve(int reserve, int maxClip, int maxReserve)
+{
+	if (reserve <= 0)
+		return 0;
+
+	if (maxClip <= 0 || maxReserve <= 0)
+		return reserve;
+
+	int remainder = maxReserve % maxClip;
+	if (remainder == 0)
+		return (reserve / maxClip) * maxClip;
+
+	if (reserve < remainder)
+		return 0;
+
+	return remainder + (((reserve - remainder) / maxClip) * maxClip);
+}
+
 void SetWeaponPlayerAmmo(int client, int weapon, int primaryAmmo)
 {
 	int ammoOffset = FindDataMapInfo(client, "m_iAmmo");
@@ -362,15 +390,20 @@ bool IsRealisticReloadShotgun(const char[] classname)
 	return false;
 }
 
-int GetRealisticReloadMaxClip(const char[] classname)
+int GetRealisticReloadMaxClip(const char[] classname, int defIndex = -1)
 {
+	if (defIndex == 60) return 20; // M4A1-S may use weapon_m4a1 as classname on some servers.
+	if (defIndex == 61) return 12; // USP-S can appear as weapon_hkp2000.
+	if (defIndex == 63) return 12; // CZ75-Auto.
+	if (defIndex == 64) return 8;  // R8 Revolver.
+
 	if (strcmp(classname, "weapon_deagle", false) == 0) return 7;
 	if (strcmp(classname, "weapon_elite", false) == 0) return 30;
 	if (strcmp(classname, "weapon_fiveseven", false) == 0) return 20;
 	if (strcmp(classname, "weapon_glock", false) == 0) return 20;
 	if (strcmp(classname, "weapon_ak47", false) == 0) return 30;
 	if (strcmp(classname, "weapon_aug", false) == 0) return 30;
-	if (strcmp(classname, "weapon_awp", false) == 0) return 10;
+	if (strcmp(classname, "weapon_awp", false) == 0) return 5;
 	if (strcmp(classname, "weapon_famas", false) == 0) return 25;
 	if (strcmp(classname, "weapon_g3sg1", false) == 0) return 20;
 	if (strcmp(classname, "weapon_galilar", false) == 0) return 35;
@@ -390,8 +423,49 @@ int GetRealisticReloadMaxClip(const char[] classname)
 	if (strcmp(classname, "weapon_scar20", false) == 0) return 20;
 	if (strcmp(classname, "weapon_sg556", false) == 0) return 30;
 	if (strcmp(classname, "weapon_ssg08", false) == 0) return 10;
-	if (strcmp(classname, "weapon_m4a1_silencer", false) == 0) return 25;
+	if (strcmp(classname, "weapon_m4a1_silencer", false) == 0) return 20;
 	if (strcmp(classname, "weapon_usp_silencer", false) == 0) return 12;
+	if (strcmp(classname, "weapon_cz75a", false) == 0) return 12;
+	if (strcmp(classname, "weapon_revolver", false) == 0) return 8;
+
+	return 0;
+}
+
+int GetRealisticReloadMaxReserve(const char[] classname, int defIndex = -1)
+{
+	if (defIndex == 60) return 80;
+	if (defIndex == 61) return 24;
+	if (defIndex == 63) return 12;
+	if (defIndex == 64) return 8;
+
+	if (strcmp(classname, "weapon_deagle", false) == 0) return 35;
+	if (strcmp(classname, "weapon_elite", false) == 0) return 120;
+	if (strcmp(classname, "weapon_fiveseven", false) == 0) return 100;
+	if (strcmp(classname, "weapon_glock", false) == 0) return 120;
+	if (strcmp(classname, "weapon_ak47", false) == 0) return 90;
+	if (strcmp(classname, "weapon_aug", false) == 0) return 90;
+	if (strcmp(classname, "weapon_awp", false) == 0) return 40;
+	if (strcmp(classname, "weapon_famas", false) == 0) return 90;
+	if (strcmp(classname, "weapon_g3sg1", false) == 0) return 90;
+	if (strcmp(classname, "weapon_galilar", false) == 0) return 90;
+	if (strcmp(classname, "weapon_m249", false) == 0) return 200;
+	if (strcmp(classname, "weapon_m4a1", false) == 0) return 90;
+	if (strcmp(classname, "weapon_mac10", false) == 0) return 100;
+	if (strcmp(classname, "weapon_p90", false) == 0) return 100;
+	if (strcmp(classname, "weapon_mp5sd", false) == 0) return 120;
+	if (strcmp(classname, "weapon_ump45", false) == 0) return 100;
+	if (strcmp(classname, "weapon_bizon", false) == 0) return 120;
+	if (strcmp(classname, "weapon_negev", false) == 0) return 200;
+	if (strcmp(classname, "weapon_tec9", false) == 0) return 90;
+	if (strcmp(classname, "weapon_hkp2000", false) == 0) return 52;
+	if (strcmp(classname, "weapon_mp7", false) == 0) return 120;
+	if (strcmp(classname, "weapon_mp9", false) == 0) return 120;
+	if (strcmp(classname, "weapon_p250", false) == 0) return 26;
+	if (strcmp(classname, "weapon_scar20", false) == 0) return 90;
+	if (strcmp(classname, "weapon_sg556", false) == 0) return 90;
+	if (strcmp(classname, "weapon_ssg08", false) == 0) return 90;
+	if (strcmp(classname, "weapon_m4a1_silencer", false) == 0) return 80;
+	if (strcmp(classname, "weapon_usp_silencer", false) == 0) return 24;
 	if (strcmp(classname, "weapon_cz75a", false) == 0) return 12;
 	if (strcmp(classname, "weapon_revolver", false) == 0) return 8;
 
