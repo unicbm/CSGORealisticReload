@@ -2,9 +2,11 @@
 #pragma newdecls required
 
 #include <sourcemod>
+#include <sdkhooks>
 #include <sdktools>
 
-#define PLUGIN_VERSION "1.0.5"
+#define PLUGIN_VERSION "1.0.6"
+#define REALISTIC_RELOAD_FIRE_GRACE 0.12
 
 ConVar g_cvEnable;
 ConVar g_cvHumans;
@@ -17,6 +19,8 @@ int g_iPendingReloadWeaponRef[MAXPLAYERS + 1];
 int g_iPendingReloadStartClip[MAXPLAYERS + 1];
 int g_iPendingReloadFinalClip[MAXPLAYERS + 1];
 int g_iPendingReloadFinalReserve[MAXPLAYERS + 1];
+bool g_bPostThinkHooked[MAXPLAYERS + 1];
+float g_fLastWeaponFireAt[MAXPLAYERS + 1];
 
 public Plugin myinfo =
 {
@@ -38,19 +42,35 @@ public void OnPluginStart()
 	AutoExecConfig(true, "realistic_reload");
 	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
 	HookEvent("player_spawn", Event_PlayerSpawn, EventHookMode_Post);
+	HookEvent("weapon_fire", Event_WeaponFire, EventHookMode_Post);
 
 	for (int client = 1; client <= MaxClients; client++)
+	{
 		ClearRealisticReloadState(client);
+		g_bPostThinkHooked[client] = false;
+		g_fLastWeaponFireAt[client] = 0.0;
+		if (IsClientInGame(client))
+			HookRealisticReloadClient(client);
+	}
 }
 
 public void OnClientPutInServer(int client)
 {
 	ClearRealisticReloadState(client);
+	g_fLastWeaponFireAt[client] = 0.0;
+	HookRealisticReloadClient(client);
 }
 
 public void OnClientDisconnect(int client)
 {
+	if (g_bPostThinkHooked[client])
+	{
+		SDKUnhook(client, SDKHook_PostThinkPost, OnClientPostThinkPost);
+		g_bPostThinkHooked[client] = false;
+	}
+
 	ClearRealisticReloadState(client);
+	g_fLastWeaponFireAt[client] = 0.0;
 }
 
 public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
@@ -103,11 +123,20 @@ public Action Timer_RefillSpawnedPlayer(Handle timer, any userid)
 	return Plugin_Stop;
 }
 
+public void Event_WeaponFire(Event event, const char[] name, bool dontBroadcast)
+{
+	int client = GetClientOfUserId(event.GetInt("userid"));
+	if (client <= 0 || client > MaxClients)
+		return;
+
+	g_fLastWeaponFireAt[client] = GetGameTime();
+}
+
 public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon, int &subtype, int &cmdnum, int &tickcount, int &seed, int mouse[2])
 {
 	if (IsValidAliveClient(client))
 	{
-		TryApplyRealisticReload(client);
+		TryApplyRealisticReload(client, buttons);
 	}
 	else if (client > 0 && client <= MaxClients)
 	{
@@ -117,7 +146,22 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 	return Plugin_Continue;
 }
 
-void TryApplyRealisticReload(int client)
+public void OnClientPostThinkPost(int client)
+{
+	if (!IsValidAliveClient(client))
+		return;
+
+	int weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+	if (!IsValidEntity(weapon) || !HasEntProp(weapon, Prop_Data, "m_bInReload"))
+		return;
+
+	if (GetEntProp(weapon, Prop_Data, "m_bInReload") != 0)
+		return;
+
+	FinishPendingRealisticReload(client, EntIndexToEntRef(weapon), weapon);
+}
+
+void TryApplyRealisticReload(int client, int buttons)
 {
 	if (!g_cvEnable.BoolValue)
 	{
@@ -160,6 +204,12 @@ void TryApplyRealisticReload(int client)
 	}
 
 	if (g_iAppliedReloadWeaponRef[client] == weaponRef)
+		return;
+
+	if ((buttons & IN_ATTACK) != 0)
+		return;
+
+	if (GetGameTime() - g_fLastWeaponFireAt[client] < REALISTIC_RELOAD_FIRE_GRACE)
 		return;
 
 	char classname[64];
@@ -271,6 +321,15 @@ void ClearRealisticReloadState(int client)
 	g_iPendingReloadStartClip[client] = 0;
 	g_iPendingReloadFinalClip[client] = 0;
 	g_iPendingReloadFinalReserve[client] = 0;
+}
+
+void HookRealisticReloadClient(int client)
+{
+	if (g_bPostThinkHooked[client])
+		return;
+
+	SDKHook(client, SDKHook_PostThinkPost, OnClientPostThinkPost);
+	g_bPostThinkHooked[client] = true;
 }
 
 void RefillClientWeaponsForNewRound(int client)

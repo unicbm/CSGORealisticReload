@@ -55,6 +55,9 @@ Why? The 25 rounds left in the old magazine are discarded, then a fresh 30-round
 - No gamedata, detours, DHooks, or eItems dependency.
 - 不需要 gamedata、detour、DHooks 或 eItems 依赖。
 
+- Uses SDKHooks only for same-frame ammo correction after reload processing.
+- 仅使用 SDKHooks 在换弹处理后的同一帧校正弹药。
+
 ## Install / 安装
 
 1. Compile `addons/sourcemod/scripting/realistic_reload.sp`.
@@ -177,8 +180,8 @@ spcomp.exe addons\sourcemod\scripting\realistic_reload.sp -iaddons\sourcemod\scr
 - Designed for CS:GO.
 - 面向 CS:GO。
 
-- Requires SourceMod and SDKTools.
-- 需要 SourceMod 和 SDKTools。
+- Requires SourceMod, SDKTools, and SDKHooks.
+- 需要 SourceMod、SDKTools 和 SDKHooks。
 
 - CS2 is not supported by SourceMod in the same way.
 - CS2 并不以相同方式支持 SourceMod。

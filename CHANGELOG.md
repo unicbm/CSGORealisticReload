@@ -1,5 +1,12 @@
 # Changelog / 更新日志
 
+## 1.0.6
+
+- Apply the final ammo correction in `SDKHook_PostThinkPost`, preventing one-frame HUD states such as Galil `20/20 -> 20/0` on the last partial magazine.
+- 在 `SDKHook_PostThinkPost` 阶段做最终弹药校正，避免 Galil 最后一个不完整弹匣出现 `20/20 -> 20/0` 的一帧 HUD 状态。
+- Delay realistic reload handling briefly after `weapon_fire` and ignore reload handling while `IN_ATTACK` is held, preventing AWP fire+reload spam from preserving a fired round.
+- 开枪后短暂延迟处理拟真换弹，并在 `IN_ATTACK` 按下时跳过换弹处理，防止 AWP 开枪瞬间狂按 R 白嫖子弹。
+
 ## 1.0.5
 
 - Discard the current clip immediately after CS:GO confirms reload start, preventing the HUD from showing vanilla ammo first and jumping later.
