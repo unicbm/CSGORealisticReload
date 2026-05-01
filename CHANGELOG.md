@@ -1,5 +1,12 @@
 # Changelog / 更新日志
 
+## 1.0.2
+
+- Treat MAG-7 as a magazine-fed weapon instead of excluding it with shell-by-shell shotguns.
+- 将 MAG-7 按多发弹匣武器处理，不再和逐发装填霰弹枪一起排除。
+- Refresh README and add Codex agent guidance plus GitHub About copy.
+- 精简 README，并补充 Codex agent 指引和 GitHub About 文案。
+
 ## 1.0.1
 
 - Preserve each weapon's default reserve cadence when aligning reserve ammo, fixing FAMAS/Galil-style reserve sequences such as FAMAS `90 -> 65 -> 40 -> 15 -> 0`.

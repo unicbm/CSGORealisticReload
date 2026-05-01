@@ -4,7 +4,7 @@
 #include <sourcemod>
 #include <sdktools>
 
-#define PLUGIN_VERSION "1.0.1"
+#define PLUGIN_VERSION "1.0.2"
 
 ConVar g_cvEnable;
 ConVar g_cvHumans;
@@ -66,7 +66,8 @@ static const char g_sClassnameAmmoSpecs[][] =
 	"weapon_m4a1_silencer",
 	"weapon_usp_silencer",
 	"weapon_cz75a",
-	"weapon_revolver"
+	"weapon_revolver",
+	"weapon_mag7"
 };
 
 static const int g_iClassnameAmmoSpecs[][] =
@@ -100,7 +101,8 @@ static const int g_iClassnameAmmoSpecs[][] =
 	{ 20, 80 },   // weapon_m4a1_silencer
 	{ 12, 24 },   // weapon_usp_silencer
 	{ 12, 12 },   // weapon_cz75a
-	{ 8, 8 }      // weapon_revolver
+	{ 8, 8 },     // weapon_revolver
+	{ 5, 32 }     // weapon_mag7
 };
 
 public Plugin myinfo =
@@ -183,7 +185,7 @@ void TryApplyRealisticReload(int client)
 	if (!GetEntityClassname(weapon, classname, sizeof(classname)))
 		return;
 
-	if (g_cvExcludeShotguns.BoolValue && IsRealisticReloadShotgun(classname))
+	if (g_cvExcludeShotguns.BoolValue && IsRealisticReloadShellByShellShotgun(classname))
 		return;
 
 	int defIndex = HasEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex") ? GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex") : -1;
@@ -325,10 +327,8 @@ void SetWeaponPlayerAmmo(int client, int weapon, int primaryAmmo)
 	SetEntData(client, ammoOffset + (ammoType * 4), primaryAmmo, 4, true);
 }
 
-bool IsRealisticReloadShotgun(const char[] classname)
+bool IsRealisticReloadShellByShellShotgun(const char[] classname)
 {
-	if (strcmp(classname, "weapon_mag7", false) == 0)
-		return true;
 	if (strcmp(classname, "weapon_nova", false) == 0)
 		return true;
 	if (strcmp(classname, "weapon_sawedoff", false) == 0)
