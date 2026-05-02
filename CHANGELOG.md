@@ -1,5 +1,19 @@
 # Changelog / 更新日志
 
+## 1.0.4
+
+- Preserve official weapon reserve tables while respecting servers that raise a weapon's actual reserve ammo above the built-in value.
+- 保留官方武器备弹表；当服务器把实际备弹调高到内置值以上时，按观测到的实际备弹节奏对齐。
+- Fix custom TEC-9 setups such as `18/120` being collapsed to the official `18/90` cadence after the first early reload.
+- 修复自定义 TEC-9 `18/120` 这类配置在第一次提前换弹后被压回官方 `18/90` 节奏的问题。
+
+## 1.0.3
+
+- Fix interrupted reloads so weapon switches before completion no longer lose reserve ammo.
+- 修复换弹中途切枪时错误扣除备弹的问题，未完成换弹不再造成备弹丢失。
+- Add opt-in reload timing diagnostics with `sm_realistic_reload_debug`.
+- 新增 `sm_realistic_reload_debug` 可选换弹时序诊断日志。
+
 ## 1.0.2
 
 - Treat MAG-7 as a magazine-fed weapon instead of excluding it with shell-by-shell shotguns.

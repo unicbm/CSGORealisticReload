@@ -4,15 +4,26 @@
 #include <sourcemod>
 #include <sdktools>
 
-#define PLUGIN_VERSION "1.0.2"
+#define PLUGIN_VERSION "1.0.4"
 
 ConVar g_cvEnable;
 ConVar g_cvHumans;
 ConVar g_cvBots;
 ConVar g_cvAlignReserve;
 ConVar g_cvExcludeShotguns;
+ConVar g_cvDebug;
 
 int g_iAppliedReloadWeaponRef[MAXPLAYERS + 1];
+int g_iPendingReloadWeaponRef[MAXPLAYERS + 1];
+int g_iPendingReloadStartClip[MAXPLAYERS + 1];
+int g_iPendingReloadStartReserve[MAXPLAYERS + 1];
+int g_iPendingReloadMaxClip[MAXPLAYERS + 1];
+int g_iPendingReloadMaxReserve[MAXPLAYERS + 1];
+int g_iDebugLastWeaponRef[MAXPLAYERS + 1];
+int g_iDebugLastClip[MAXPLAYERS + 1];
+int g_iDebugLastReserve[MAXPLAYERS + 1];
+bool g_bDebugLastInReload[MAXPLAYERS + 1];
+bool g_bDebugLastStateKnown[MAXPLAYERS + 1];
 
 enum
 {
@@ -121,6 +132,7 @@ public void OnPluginStart()
 	g_cvBots = CreateConVar("sm_realistic_reload_bots", "1", "Apply realistic reload to bots.", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	g_cvAlignReserve = CreateConVar("sm_realistic_reload_align_reserve", "1", "Align reserve ammo to full-magazine multiples after reload.", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 	g_cvExcludeShotguns = CreateConVar("sm_realistic_reload_exclude_shotguns", "1", "Keep shell-by-shell shotgun reload behavior unchanged.", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+	g_cvDebug = CreateConVar("sm_realistic_reload_debug", "0", "Log reload timing diagnostics.", 0, true, 0.0, true, 1.0);
 
 	AutoExecConfig(true, "realistic_reload");
 
@@ -155,15 +167,27 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 void TryApplyRealisticReload(int client)
 {
 	if (!g_cvEnable.BoolValue)
+	{
+		ClearRealisticReloadState(client);
 		return;
+	}
 
 	bool isBot = IsFakeClient(client);
 	if (isBot && !g_cvBots.BoolValue)
+	{
+		ClearRealisticReloadState(client);
 		return;
+	}
 	if (!isBot && !g_cvHumans.BoolValue)
+	{
+		ClearRealisticReloadState(client);
 		return;
+	}
 
 	int weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+	TraceRealisticReloadState(client, weapon);
+	ResolvePendingRealisticReload(client, weapon);
+
 	if (!IsValidEntity(weapon))
 		return;
 
@@ -174,11 +198,15 @@ void TryApplyRealisticReload(int client)
 	int weaponRef = EntIndexToEntRef(weapon);
 	if (!inReload)
 	{
-		g_iAppliedReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
+		if (g_iAppliedReloadWeaponRef[client] == weaponRef)
+			g_iAppliedReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
 		return;
 	}
 
 	if (g_iAppliedReloadWeaponRef[client] == weaponRef)
+		return;
+
+	if (g_iPendingReloadWeaponRef[client] == weaponRef)
 		return;
 
 	char classname[64];
@@ -201,50 +229,191 @@ void TryApplyRealisticReload(int client)
 	if (reserve <= 0)
 		return;
 
-	int missing = maxClip - clip;
-	int reserveBeforeEngineLoad;
+	g_iPendingReloadWeaponRef[client] = weaponRef;
+	g_iPendingReloadStartClip[client] = clip;
+	g_iPendingReloadStartReserve[client] = reserve;
+	g_iPendingReloadMaxClip[client] = maxClip;
+	g_iPendingReloadMaxReserve[client] = GetRealisticReloadMaxReserve(classname, defIndex);
+	if (reserve > g_iPendingReloadMaxReserve[client])
+		g_iPendingReloadMaxReserve[client] = reserve;
+	LogRealisticReloadDebug("track_start client=%N tick=%d time=%.3f weapon=%d ref=%d classname=%s def_index=%d start_clip=%d start_reserve=%d max_clip=%d max_reserve=%d", client, GetGameTickCount(), GetGameTime(), weapon, weaponRef, classname, defIndex, clip, reserve, maxClip, g_iPendingReloadMaxReserve[client]);
+}
+
+void ResolvePendingRealisticReload(int client, int activeWeapon)
+{
+	if (g_iPendingReloadWeaponRef[client] == INVALID_ENT_REFERENCE)
+		return;
+
+	int weapon = EntRefToEntIndex(g_iPendingReloadWeaponRef[client]);
+	if (weapon == INVALID_ENT_REFERENCE || !IsValidEntity(weapon) || !HasEntProp(weapon, Prop_Data, "m_iClip1") || !HasEntProp(weapon, Prop_Data, "m_bInReload"))
+	{
+		LogRealisticReloadDebug("track_clear client=%N tick=%d time=%.3f reason=invalid_pending pending_ref=%d active=%d", client, GetGameTickCount(), GetGameTime(), g_iPendingReloadWeaponRef[client], activeWeapon);
+		ClearPendingRealisticReloadState(client);
+		return;
+	}
+
+	int clip = GetEntProp(weapon, Prop_Data, "m_iClip1");
+	if (clip > g_iPendingReloadStartClip[client])
+	{
+		int reserve = GetRealisticReloadReserveAmmo(client, weapon);
+		int activeWeaponRef = IsValidEntity(activeWeapon) ? EntIndexToEntRef(activeWeapon) : INVALID_ENT_REFERENCE;
+		bool inReload = !!GetEntProp(weapon, Prop_Data, "m_bInReload");
+		LogRealisticReloadDebug("complete_observed client=%N tick=%d time=%.3f weapon=%d ref=%d active_ref=%d in_reload=%d start_clip=%d engine_clip=%d start_reserve=%d engine_reserve=%d", client, GetGameTickCount(), GetGameTime(), weapon, EntIndexToEntRef(weapon), activeWeaponRef, inReload ? 1 : 0, g_iPendingReloadStartClip[client], clip, g_iPendingReloadStartReserve[client], reserve);
+		ApplyCompletedRealisticReload(client, weapon);
+		g_iAppliedReloadWeaponRef[client] = EntIndexToEntRef(weapon);
+		ClearPendingRealisticReloadState(client);
+		return;
+	}
+
+	bool inReload = !!GetEntProp(weapon, Prop_Data, "m_bInReload");
+	if (!inReload || weapon != activeWeapon)
+	{
+		int reserve = GetRealisticReloadReserveAmmo(client, weapon);
+		int activeWeaponRef = IsValidEntity(activeWeapon) ? EntIndexToEntRef(activeWeapon) : INVALID_ENT_REFERENCE;
+		char reason[32];
+		if (inReload)
+			strcopy(reason, sizeof(reason), "weapon_switch");
+		else
+			strcopy(reason, sizeof(reason), "reload_stopped");
+		LogRealisticReloadDebug("track_cancel client=%N tick=%d time=%.3f reason=%s weapon=%d ref=%d active=%d active_ref=%d in_reload=%d start_clip=%d clip=%d start_reserve=%d reserve=%d", client, GetGameTickCount(), GetGameTime(), reason, weapon, EntIndexToEntRef(weapon), activeWeapon, activeWeaponRef, inReload ? 1 : 0, g_iPendingReloadStartClip[client], clip, g_iPendingReloadStartReserve[client], reserve);
+		ClearPendingRealisticReloadState(client);
+	}
+}
+
+void ApplyCompletedRealisticReload(int client, int weapon)
+{
+	int startClip = g_iPendingReloadStartClip[client];
+	int startReserve = g_iPendingReloadStartReserve[client];
+	int maxClip = g_iPendingReloadMaxClip[client];
+	int maxReserve = g_iPendingReloadMaxReserve[client];
+	int missing = maxClip - startClip;
+	if (missing <= 0)
+	{
+		LogRealisticReloadDebug("apply_skip client=%N tick=%d time=%.3f reason=no_missing start_clip=%d max_clip=%d", client, GetGameTickCount(), GetGameTime(), startClip, maxClip);
+		return;
+	}
+
+	int engineClip = GetEntProp(weapon, Prop_Data, "m_iClip1");
+	int reserve = GetRealisticReloadReserveAmmo(client, weapon);
 
 	if (g_cvAlignReserve.BoolValue)
 	{
-		int targetReserveAfterReload = reserve - maxClip;
+		int targetReserveAfterReload = startReserve - maxClip;
 		if (targetReserveAfterReload < 0)
 			targetReserveAfterReload = 0;
-		targetReserveAfterReload = AlignRealisticReloadReserve(targetReserveAfterReload, maxClip, GetRealisticReloadMaxReserve(classname, defIndex));
-		if (targetReserveAfterReload == 0 && reserve <= maxClip)
+		targetReserveAfterReload = AlignRealisticReloadReserve(targetReserveAfterReload, maxClip, maxReserve);
+		if (targetReserveAfterReload == 0 && startReserve <= maxClip)
 		{
-			SetEntProp(weapon, Prop_Data, "m_iClip1", reserve);
+			SetEntProp(weapon, Prop_Data, "m_iClip1", startReserve);
 			SetRealisticReloadReserveAmmo(client, weapon, 0);
-			g_iAppliedReloadWeaponRef[client] = weaponRef;
+			LogRealisticReloadDebug("apply_complete client=%N tick=%d time=%.3f mode=align_final_partial weapon=%d ref=%d start_clip=%d start_reserve=%d engine_clip=%d engine_reserve=%d final_clip=%d final_reserve=0", client, GetGameTickCount(), GetGameTime(), weapon, EntIndexToEntRef(weapon), startClip, startReserve, engineClip, reserve, startReserve);
 			return;
 		}
 
-		reserveBeforeEngineLoad = targetReserveAfterReload + missing;
-		if (reserveBeforeEngineLoad > reserve)
-			reserveBeforeEngineLoad = reserve;
+		if (targetReserveAfterReload < reserve)
+			SetRealisticReloadReserveAmmo(client, weapon, targetReserveAfterReload);
+
+		LogRealisticReloadDebug("apply_complete client=%N tick=%d time=%.3f mode=align weapon=%d ref=%d start_clip=%d start_reserve=%d engine_clip=%d engine_reserve=%d final_clip=%d final_reserve=%d target_reserve=%d", client, GetGameTickCount(), GetGameTime(), weapon, EntIndexToEntRef(weapon), startClip, startReserve, engineClip, reserve, GetEntProp(weapon, Prop_Data, "m_iClip1"), GetRealisticReloadReserveAmmo(client, weapon), targetReserveAfterReload);
 	}
 	else
 	{
-		int extraReserve = reserve - missing;
+		int extraReserve = startReserve - missing;
 		if (extraReserve <= 0)
+		{
+			LogRealisticReloadDebug("apply_skip client=%N tick=%d time=%.3f reason=no_extra_reserve start_clip=%d start_reserve=%d missing=%d engine_clip=%d engine_reserve=%d", client, GetGameTickCount(), GetGameTime(), startClip, startReserve, missing, engineClip, reserve);
 			return;
+		}
 
-		int penalty = clip;
+		int penalty = startClip;
 		if (penalty > extraReserve)
 			penalty = extraReserve;
 
-		reserveBeforeEngineLoad = reserve - penalty;
+		int targetReserveAfterReload = startReserve - missing - penalty;
+		if (targetReserveAfterReload < 0)
+			targetReserveAfterReload = 0;
+
+		if (targetReserveAfterReload < reserve)
+			SetRealisticReloadReserveAmmo(client, weapon, targetReserveAfterReload);
+
+		LogRealisticReloadDebug("apply_complete client=%N tick=%d time=%.3f mode=legacy_penalty weapon=%d ref=%d start_clip=%d start_reserve=%d penalty=%d engine_clip=%d engine_reserve=%d final_clip=%d final_reserve=%d target_reserve=%d", client, GetGameTickCount(), GetGameTime(), weapon, EntIndexToEntRef(weapon), startClip, startReserve, penalty, engineClip, reserve, GetEntProp(weapon, Prop_Data, "m_iClip1"), GetRealisticReloadReserveAmmo(client, weapon), targetReserveAfterReload);
 	}
-
-	if (reserveBeforeEngineLoad >= reserve)
-		return;
-
-	SetRealisticReloadReserveAmmo(client, weapon, reserveBeforeEngineLoad);
-	g_iAppliedReloadWeaponRef[client] = weaponRef;
 }
 
 void ClearRealisticReloadState(int client)
 {
 	g_iAppliedReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
+	ClearPendingRealisticReloadState(client);
+	ClearRealisticReloadDebugState(client);
+}
+
+void ClearPendingRealisticReloadState(int client)
+{
+	g_iPendingReloadWeaponRef[client] = INVALID_ENT_REFERENCE;
+	g_iPendingReloadStartClip[client] = 0;
+	g_iPendingReloadStartReserve[client] = 0;
+	g_iPendingReloadMaxClip[client] = 0;
+	g_iPendingReloadMaxReserve[client] = 0;
+}
+
+void ClearRealisticReloadDebugState(int client)
+{
+	g_iDebugLastWeaponRef[client] = INVALID_ENT_REFERENCE;
+	g_iDebugLastClip[client] = 0;
+	g_iDebugLastReserve[client] = 0;
+	g_bDebugLastInReload[client] = false;
+	g_bDebugLastStateKnown[client] = false;
+}
+
+void TraceRealisticReloadState(int client, int weapon)
+{
+	if (!g_cvDebug.BoolValue)
+		return;
+
+	if (!IsValidEntity(weapon) || !HasEntProp(weapon, Prop_Data, "m_iClip1"))
+	{
+		if (g_bDebugLastStateKnown[client])
+		{
+			LogRealisticReloadDebug("state client=%N tick=%d time=%.3f active=%d valid=0 pending_ref=%d applied_ref=%d", client, GetGameTickCount(), GetGameTime(), weapon, g_iPendingReloadWeaponRef[client], g_iAppliedReloadWeaponRef[client]);
+			ClearRealisticReloadDebugState(client);
+		}
+		return;
+	}
+
+	int weaponRef = EntIndexToEntRef(weapon);
+	int clip = GetEntProp(weapon, Prop_Data, "m_iClip1");
+	int reserve = GetRealisticReloadReserveAmmo(client, weapon);
+	bool inReload = HasEntProp(weapon, Prop_Data, "m_bInReload") && !!GetEntProp(weapon, Prop_Data, "m_bInReload");
+
+	if (g_bDebugLastStateKnown[client]
+		&& g_iDebugLastWeaponRef[client] == weaponRef
+		&& g_iDebugLastClip[client] == clip
+		&& g_iDebugLastReserve[client] == reserve
+		&& g_bDebugLastInReload[client] == inReload)
+	{
+		return;
+	}
+
+	char classname[64];
+	if (!GetEntityClassname(weapon, classname, sizeof(classname)))
+		strcopy(classname, sizeof(classname), "<unknown>");
+
+	LogRealisticReloadDebug("state client=%N tick=%d time=%.3f weapon=%d ref=%d classname=%s in_reload=%d clip=%d reserve=%d pending_ref=%d applied_ref=%d", client, GetGameTickCount(), GetGameTime(), weapon, weaponRef, classname, inReload ? 1 : 0, clip, reserve, g_iPendingReloadWeaponRef[client], g_iAppliedReloadWeaponRef[client]);
+
+	g_iDebugLastWeaponRef[client] = weaponRef;
+	g_iDebugLastClip[client] = clip;
+	g_iDebugLastReserve[client] = reserve;
+	g_bDebugLastInReload[client] = inReload;
+	g_bDebugLastStateKnown[client] = true;
+}
+
+void LogRealisticReloadDebug(const char[] format, any ...)
+{
+	if (!g_cvDebug.BoolValue)
+		return;
+
+	char message[512];
+	VFormat(message, sizeof(message), format, 2);
+	LogMessage("[realistic_reload_debug] %s", message);
 }
 
 int GetRealisticReloadReserveAmmo(int client, int weapon)
