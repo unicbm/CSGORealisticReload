@@ -1,5 +1,16 @@
 # Changelog / 更新日志
 
+## 1.0.5
+
+- Derive realistic reload results from the runtime engine reload result instead of built-in weapon clip and reserve tables.
+- 改为根据游戏运行时实际换弹后的弹匣结果计算写实换弹，不再依赖内置武器弹匣和备弹表。
+- Fix custom reserve cadences collapsing mid-sequence on community servers.
+- 修复社区服自定义备弹节奏在中途被压回内置表的问题。
+- Fix final partial magazines regardless of `sm_realistic_reload_align_reserve`.
+- 无论 `sm_realistic_reload_align_reserve` 如何设置，都正确处理最后一匣非满弹匣。
+- Keep `sm_realistic_reload_align_reserve` as a deprecated compatibility ConVar; the runtime algorithm now ignores it.
+- `sm_realistic_reload_align_reserve` 仅作为兼容旧配置的弃用 ConVar 保留，当前运行时算法会忽略它。
+
 ## 1.0.4
 
 - Preserve official weapon reserve tables while respecting servers that raise a weapon's actual reserve ammo above the built-in value.
