@@ -1,5 +1,10 @@
 # Changelog / 更新日志
 
+## 1.0.6
+
+- Clear pending reload tracking at round start and player spawn so a reload finishing across the round boundary cannot overwrite restored new-round reserve ammo.
+- 在新回合开始和玩家出生时清理未完成的换弹跟踪，避免跨回合完成的换弹覆盖新回合恢复的备弹。
+
 ## 1.0.5
 
 - Derive realistic reload results from the runtime engine reload result instead of built-in weapon clip and reserve tables.

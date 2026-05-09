@@ -4,7 +4,7 @@
 #include <sourcemod>
 #include <sdktools>
 
-#define PLUGIN_VERSION "1.0.5"
+#define PLUGIN_VERSION "1.0.6"
 
 ConVar g_cvEnable;
 ConVar g_cvHumans;
@@ -41,6 +41,8 @@ public void OnPluginStart()
 	g_cvDebug = CreateConVar("sm_realistic_reload_debug", "0", "Log reload timing diagnostics.", 0, true, 0.0, true, 1.0);
 
 	AutoExecConfig(true, "realistic_reload");
+	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
+	HookEvent("player_spawn", Event_PlayerSpawn, EventHookMode_Post);
 
 	for (int client = 1; client <= MaxClients; client++)
 		ClearRealisticReloadState(client);
@@ -54,6 +56,19 @@ public void OnClientPutInServer(int client)
 public void OnClientDisconnect(int client)
 {
 	ClearRealisticReloadState(client);
+}
+
+public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+{
+	for (int client = 1; client <= MaxClients; client++)
+		ClearRealisticReloadState(client);
+}
+
+public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
+{
+	int client = GetClientOfUserId(event.GetInt("userid"));
+	if (client > 0 && client <= MaxClients)
+		ClearRealisticReloadState(client);
 }
 
 public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon, int &subtype, int &cmdnum, int &tickcount, int &seed, int mouse[2])
